@@ -25,7 +25,7 @@ var (
 	DELETE = Method("DELETE")
 )
 
-type RestRequest struct {
+type Request struct {
 	Url     string            // Raw URL string
 	Method  Method            // HTTP method to use 
 	Params  map[string]string // URL parameters for GET requests (ignored otherwise)
@@ -33,8 +33,14 @@ type RestRequest struct {
 	Data    interface{}       // Data to JSON-encode and include with call
 	Result  interface{}       // JSON-encoded data in respose will be unmarshalled into Result
 	Error   interface{}       // If server returns error status, JSON-encoded response data will be unmarshalled into Error
-	RawText string            // Gets populated with raw text of server response
+}
+
+type Response struct {
+	Request *Request // Request used to generate this response
 	Status	int  // HTTP status for executed request
+	Result  interface{}       // JSON-encoded data in respose will be unmarshalled into Result
+	Error   interface{}       // If server returns error status, JSON-encoded response data will be unmarshalled into Error
+	RawText string            // Gets populated with raw text of server response
 }
 
 // Client is a REST client.
@@ -51,26 +57,27 @@ func New() *Client {
 }
 
 // Do executes a REST request.
-func (c *Client) Do(r *RestRequest) (status int, err error) {
-	if r.Error == nil {
-		r.Error = c.DefaultError
-	}
+func (c *Client) Do(req *Request) (*Response, error) {
+	resp := new(Response)
+	resp.Request = req
+	resp.Result = req.Result
+	resp.Error = req.Error
 	//
 	// Create a URL object from the raw url string.  This will allow us to compose
 	// query parameters programmatically and be guaranteed of a well-formed URL.
 	//
-	u, err := url.Parse(r.Url)
+	u, err := url.Parse(req.Url)
 	if err != nil {
 		log.Println(err)
-		return
+		return resp, err
 	}
 	//
 	// If we are making a GET request and the user populated the Params field, then
 	// add the params to the URL's querystring.
 	//
-	if r.Method == GET && r.Params != nil {
+	if req.Method == GET && req.Params != nil {
 		vals := u.Query()
-		for k, v := range r.Params {
+		for k, v := range req.Params {
 			vals.Set(k, v)
 		}
 		u.RawQuery = vals.Encode()
@@ -79,35 +86,35 @@ func (c *Client) Do(r *RestRequest) (status int, err error) {
 	// Create a Request object; if populated, Data field is JSON encoded as request
 	// body
 	//
-	m := string(r.Method)
-	var req *http.Request
-	if r.Data == nil {
-		req, err = http.NewRequest(m, u.String(), nil)
+	m := string(req.Method)
+	var hReq *http.Request
+	if req.Data == nil {
+		hReq, err = http.NewRequest(m, u.String(), nil)
 	} else {
 		var b []byte
-		b, err = json.Marshal(r.Data)
+		b, err = json.Marshal(req.Data)
 		if err != nil {
 			log.Println(err)
-			return
+			return resp, err
 		}
 		buf := bytes.NewBuffer(b)
-		req, err = http.NewRequest(m, u.String(), buf)
-		req.Header.Add("Content-Type", "application/json")
+		hReq, err = http.NewRequest(m, u.String(), buf)
+		hReq.Header.Add("Content-Type", "application/json")
 	}
 	if err != nil {
 		log.Println(err)
-		return
+		return resp, err
 	}
 	//
 	// If Accept header is unset, set it for JSON.
 	//
-	if req.Header.Get("Accept") == "" {
-		req.Header.Add("Accept", "application/json")
+	if hReq.Header.Get("Accept") == "" {
+		hReq.Header.Add("Accept", "application/json")
 	}
 	//
 	// Execute the HTTP request
 	//
-	resp, err := c.HttpClient.Do(req)
+	hResp, err := c.HttpClient.Do(hReq)
 	if err != nil {
 		_, file, line, ok := runtime.Caller(1)
 		if !ok {
@@ -115,32 +122,44 @@ func (c *Client) Do(r *RestRequest) (status int, err error) {
 			line = 0
 		}
 		lineNo := strconv.Itoa(line)
-		s := "Error executing REST request, called from " + file + ":" + lineNo + ": "
+		s := "Error executing REST request:\n"
+		s += "\t Called from " + file + ":" + lineNo + "\n"
+		s += "\t "
 		log.Println(s, err)
-		return
+		return resp, err
 	}
-	status = resp.StatusCode
-	r.Status = resp.StatusCode
+	resp.Status = hResp.StatusCode
 	var data []byte
-	data, err = ioutil.ReadAll(resp.Body)
+	data, err = ioutil.ReadAll(hResp.Body)
 	if err != nil {
 		log.Println(err)
-		return
+		return resp, err
 	}
-	r.RawText = string(data)
+	resp.RawText = string(data)
 	// If server returned no data, don't bother trying to unmarshall it (which will fail anyways).
-	if r.RawText == "" {
-		return
+	if resp.RawText == "" {
+		return resp, err
 	}
-	if status >= 200 && status < 300 {
-		err = json.Unmarshal(data, &r.Result)
+	if resp.Status >= 200 && resp.Status < 300 {
+		err = c.unmarshal(data, &resp.Result)
 	} else {
-		err = json.Unmarshal(data, &r.Error)
+		err = c.unmarshal(data, &resp.Error)
 	}
 	if err != nil {
-		log.Println(status)
+		log.Println(resp)
 		log.Println(err)
-		log.Println(r.RawText)
 	}
-	return
+	return resp, err
+}
+
+// unmarshal parses the JSON-encoded data and stores the result in the value
+// pointed to by v.  If the data cannot be unmarshalled without error, v will be 
+// reassigned the value interface{}, and data unmarshalled into that.
+func (c *Client) unmarshal(data []byte, v interface{}) error {
+	err := json.Unmarshal(data, v)
+	if err == nil {
+		return nil
+	}
+	v = new(interface{})
+	return json.Unmarshal(data, v)
 }

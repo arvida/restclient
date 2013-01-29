@@ -150,34 +150,34 @@ func TestGet(t *testing.T) {
 	// Good request
 	//
 	client := New()
-	r := RestRequest{
+	r := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: GET,
 		Params: fooMap,
 		// Params: map[string]string{"bad": "value"},
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&r)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
-	assert.Equal(t, r.Result, &barStruct)
+	assert.Equal(t, resp.Status, 200)
+	assert.Equal(t, resp.Result, &barStruct)
 	// 
 	// Bad request
 	//
 	client = New()
-	r = RestRequest{
+	r = Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: GET,
 		Params: map[string]string{"bad": "value"},
 		Error:  new(errorStruct),
 	}
-	status, err = client.Do(&r)
+	resp, err = client.Do(&r)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 500)
+	assert.Equal(t, resp.Status, 500)
 	expected := errorStruct{
 		Message: "Bad query params: bad=value",
 		Status:  500,
@@ -190,35 +190,35 @@ func TestPost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(HandlePost))
 	defer srv.Close()
 	client := New()
-	r := RestRequest{
+	r := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: POST,
 		Data:   fooStruct,
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&r)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
-	assert.Equal(t, r.Result, &barStruct)
+	assert.Equal(t, resp.Status, 200)
+	assert.Equal(t, resp.Result, &barStruct)
 }
 
 func TestPut(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(HandlePut))
 	defer srv.Close()
 	client := New()
-	r := RestRequest{
+	r := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: PUT,
 		Data:   fooStruct,
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&r)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
+	assert.Equal(t, resp.Status, 200)
 	// Server should return NO data
-	assert.Equal(t, r.RawText, "")
+	assert.Equal(t, resp.RawText, "")
 }
