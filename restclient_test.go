@@ -1,10 +1,6 @@
 // Copyright (c) 2012 Jason McVetta.  This is Free Software, released under the 
 // terms of the GPL v3.  See http://www.gnu.org/copyleft/gpl.html for details.
 
-//
-// The Neo4j Manual section numbers quoted herein refer to the manual for 
-// milestone release 1.8.M06.  http://docs.neo4j.org/chunked/milestone/
-
 package restclient
 
 import (
@@ -150,39 +146,39 @@ func TestGet(t *testing.T) {
 	// Good request
 	//
 	client := New()
-	r := RestRequest{
+	req := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: GET,
 		Params: fooMap,
 		// Params: map[string]string{"bad": "value"},
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&req)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
-	assert.Equal(t, r.Result, &barStruct)
+	assert.Equal(t, resp.Status, 200)
+	assert.Equal(t, resp.Result, &barStruct)
 	// 
 	// Bad request
 	//
 	client = New()
-	r = RestRequest{
+	req = Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: GET,
 		Params: map[string]string{"bad": "value"},
 		Error:  new(errorStruct),
 	}
-	status, err = client.Do(&r)
+	resp, err = client.Do(&req)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 500)
+	assert.Equal(t, resp.Status, 500)
 	expected := errorStruct{
 		Message: "Bad query params: bad=value",
 		Status:  500,
 	}
-	e := r.Error.(*errorStruct)
+	e := resp.Error.(*errorStruct)
 	assert.Equal(t, *e, expected)
 }
 
@@ -190,35 +186,35 @@ func TestPost(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(HandlePost))
 	defer srv.Close()
 	client := New()
-	r := RestRequest{
+	req := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: POST,
 		Data:   fooStruct,
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&req)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
-	assert.Equal(t, r.Result, &barStruct)
+	assert.Equal(t, resp.Status, 200)
+	assert.Equal(t, resp.Result, &barStruct)
 }
 
 func TestPut(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(HandlePut))
 	defer srv.Close()
 	client := New()
-	r := RestRequest{
+	req := Request{
 		Url:    "http://" + srv.Listener.Addr().String(),
 		Method: PUT,
 		Data:   fooStruct,
 		Result: new(structType),
 	}
-	status, err := client.Do(&r)
+	resp, err := client.Do(&req)
 	if err != nil {
 		t.Error(err)
 	}
-	assert.Equal(t, status, 200)
+	assert.Equal(t, resp.Status, 200)
 	// Server should return NO data
-	assert.Equal(t, r.RawText, "")
+	assert.Equal(t, resp.RawText, "")
 }
